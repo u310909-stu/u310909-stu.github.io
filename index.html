@@ -119,7 +119,6 @@
             0% { opacity: 0.8; } 100% { opacity: 1; }
         }
 
-        /* 比例設定與圖表共同面板樣式 */
         .settings-panel {
             background: var(--card);
             backdrop-filter: blur(10px);
@@ -142,7 +141,6 @@
             margin-bottom: 20px;
         }
 
-        /* ★ 新增：圖表響應式 RWD 網格佈局 */
         .chart-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
@@ -150,7 +148,6 @@
             width: 100%;
         }
 
-        /* 讓 iframe 可以完美填滿外框並保持圓角細節 */
         .chart-container {
             position: relative;
             width: 100%;
@@ -273,20 +270,20 @@
         <h2>📊 雲端數據歷史趨勢圖 (每20秒自動同步)</h2>
         <div class="chart-grid">
             <div class="chart-container">
-    <iframe src="https://thingspeak.com/channels/3412365/charts/1?bgcolor=%231e293b&color=%2300d1b2&dynamic=true&results=30&type=line&update=20&api_key=URP8STHIXLVRQ6I6"></iframe>
-</div>
-<div class="chart-container">
-    <iframe src="https://thingspeak.com/channels/3412365/charts/2?bgcolor=%231e293b&color=%2338bdf8&dynamic=true&results=30&type=line&update=20&api_key=URP8STHIXLVRQ6I6"></iframe>
-</div>
-<div class="chart-container">
-    <iframe src="https://thingspeak.com/channels/3412365/charts/3?bgcolor=%231e293b&color=%23a855f7&dynamic=true&results=30&type=line&update=20&api_key=URP8STHIXLVRQ6I6"></iframe>
-</div>
-<div class="chart-container">
-    <iframe src="https://thingspeak.com/channels/3412365/charts/4?bgcolor=%231e293b&color=%23eab308&dynamic=true&results=30&type=line&update=20&api_key=URP8STHIXLVRQ6I6"></iframe>
-</div>
-<div class="chart-container">
-    <iframe src="https://thingspeak.com/channels/3412365/charts/5?bgcolor=%231e293b&color=%2322c55e&dynamic=true&results=30&type=line&update=20&api_key=URP8STHIXLVRQ6I6"></iframe>
-</div>
+                <iframe src="https://thingspeak.com/channels/3412365/charts/1?bgcolor=%231e293b&color=%2300d1b2&dynamic=true&results=30&type=line&update=20&api_key=URP8STHIXLVRQ6I6"></iframe>
+            </div>
+            <div class="chart-container">
+                <iframe src="https://thingspeak.com/channels/3412365/charts/2?bgcolor=%231e293b&color=%2338bdf8&dynamic=true&results=30&type=line&update=20&api_key=URP8STHIXLVRQ6I6"></iframe>
+            </div>
+            <div class="chart-container">
+                <iframe src="https://thingspeak.com/channels/3412365/charts/3?bgcolor=%231e293b&color=%23a855f7&dynamic=true&results=30&type=line&update=20&api_key=URP8STHIXLVRQ6I6"></iframe>
+            </div>
+            <div class="chart-container">
+                <iframe src="https://thingspeak.com/channels/3412365/charts/4?bgcolor=%231e293b&color=%23eab308&dynamic=true&results=30&type=line&update=20&api_key=URP8STHIXLVRQ6I6"></iframe>
+            </div>
+            <div class="chart-container">
+                <iframe src="https://thingspeak.com/channels/3412365/charts/5?bgcolor=%231e293b&color=%2322c55e&dynamic=true&results=30&type=line&update=20&api_key=URP8STHIXLVRQ6I6"></iframe>
+            </div>
         </div>
     </div>
 
@@ -373,6 +370,7 @@
             statusEl.innerText = "✅ 已連線面板";
             statusEl.style.color = "#00d1b2";
             
+            // 訂閱數據與運轉狀態
             client.subscribe("MYproject3109915/temperature");
             client.subscribe("MYproject3109915/humidity");
             client.subscribe("MYproject3109915/light");      
@@ -384,6 +382,11 @@
             client.subscribe("MYproject3109915/status/nutB");
             client.subscribe("MYproject3109915/status/mix");
             client.subscribe("MYproject3109915/status/out");
+
+            // 【新增】網頁連線時，訂閱 ESP32 內部 Flash 所保存的時間設定
+            client.subscribe("MYproject3109915/report/water");
+            client.subscribe("MYproject3109915/report/nutA");
+            client.subscribe("MYproject3109915/report/nutB");
         });
 
         client.on("offline", function () {
@@ -424,17 +427,30 @@
             const payload = message.toString();
             console.log("收到數據:", topic, payload);
 
+            // 處理即時感測器數據
             if (topic.includes("temperature")) updateDisplay("temp", payload, v => v > 35);
             else if (topic.includes("humidity")) updateDisplay("humi", payload);
             else if (topic.includes("light")) updateDisplay("lux", payload);
             else if (topic.includes("watertemp")) updateDisplay("w_temp", payload, v => v > 30);
             else if (topic.includes("waterleval")) updateDisplay("w_level", payload, v => v < 20);
             
+            // 處理馬達運轉狀態
             else if (topic.includes("status/water")) updateMotorStatus("motor-water", payload);
             else if (topic.includes("status/nutA"))  updateMotorStatus("motor-nutA", payload);
             else if (topic.includes("status/nutB"))  updateMotorStatus("motor-nutB", payload);
             else if (topic.includes("status/mix"))   updateMotorStatus("motor-mix", payload);
             else if (topic.includes("status/out"))   updateMotorStatus("motor-out", payload);
+
+            // 【新增】接收來自 ESP32 目前真正的 Flash 時間參數，並自動填入網頁輸入框中 (將 ms 轉換為秒)
+            else if (topic.includes("report/water")) {
+                document.getElementById("time-water").value = Math.floor(parseInt(payload) / 1000);
+            }
+            else if (topic.includes("report/nutA")) {
+                document.getElementById("time-nutA").value = Math.floor(parseInt(payload) / 1000);
+            }
+            else if (topic.includes("report/nutB")) {
+                document.getElementById("time-nutB").value = Math.floor(parseInt(payload) / 1000);
+            }
 
             const statusEl = document.getElementById("status");
             statusEl.innerText = "● 數據更新於 " + new Date().toLocaleTimeString();
