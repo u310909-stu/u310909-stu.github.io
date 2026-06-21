@@ -4,8 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ESP32 智慧監控面板</title>
-    <!-- 引入 MQTT.js 庫 -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/mqtt/5.10.1/mqtt.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mqtt/5.10.1/mqtt.min.js"></script>
 
     <style>
         :root {
@@ -13,6 +12,7 @@
             --bg: #0f172a;
             --card: rgba(30, 41, 59, 0.7);
             --warn: #ff4757;
+            --success: #22c55e;
         }
 
         body {
@@ -24,6 +24,7 @@
             flex-direction: column;
             align-items: center;
             min-height: 100vh;
+            padding-bottom: 30px;
         }
 
         h1 {
@@ -31,6 +32,21 @@
             font-weight: 300;
             color: var(--primary);
             letter-spacing: 1px;
+        }
+
+        #status {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 8px 18px;
+            background: rgba(15, 23, 42, 0.6);
+            backdrop-filter: blur(8px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 50px;
+            font-size: 13px;
+            z-index: 9999;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            transition: all 0.3s;
         }
 
         .dashboard {
@@ -62,22 +78,153 @@
         .value { font-size: 38px; color: var(--primary); font-weight: bold; }
         .unit { font-size: 16px; color: #64748b; margin-left: 4px; }
 
-        #status {
-            margin-top: auto;
-            margin-bottom: 20px;
-            padding: 8px 20px;
-            background: rgba(0, 0, 0, 0.3);
-            border-radius: 50px;
-            font-size: 13px;
+        .motor-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 12px;
+            width: 100%;
+            margin-top: 10px;
         }
 
-        /* 數值更新時的閃爍效果 */
+        .motor-card {
+            background: rgba(15, 23, 42, 0.5);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 12px;
+            padding: 12px 16px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 14px;
+            color: #cbd5e1;
+        }
+
+        .motor-state {
+            padding: 3px 10px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: bold;
+            background: #475569;
+            color: #cbd5e1;
+            transition: all 0.3s;
+        }
+
+        .motor-running {
+            background: var(--success) !important;
+            color: #fff !important;
+            box-shadow: 0 0 10px var(--success);
+            animation: pulse-glow 1.2s infinite alternate;
+        }
+
+        @keyframes pulse-glow {
+            0% { opacity: 0.8; } 100% { opacity: 1; }
+        }
+
+        /* 比例設定與圖表共同面板樣式 */
+        .settings-panel {
+            background: var(--card);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 20px;
+            padding: 25px;
+            width: 90%;
+            max-width: 1000px;
+            margin-top: 25px;
+            box-sizing: border-box;
+        }
+
+        .settings-panel h2 {
+            margin-top: 0;
+            font-size: 18px;
+            color: var(--primary);
+            font-weight: 400;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+        }
+
+        /* ★ 新增：圖表響應式 RWD 網格佈局 */
+        .chart-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 15px;
+            width: 100%;
+        }
+
+        /* 讓 iframe 可以完美填滿外框並保持圓角細節 */
+        .chart-container {
+            position: relative;
+            width: 100%;
+            height: 260px;
+            background: rgba(15, 23, 42, 0.4);
+            border-radius: 12px;
+            overflow: hidden;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .chart-container iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+        }
+
+        .config-flex-container {
+            display: flex;
+            flex-direction: column;
+            max-width: 450px;
+            margin: 0 auto;
+        }
+
+        .input-group {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .input-group label {
+            font-size: 14px;
+            color: #94a3b8;
+        }
+
+        .input-group input {
+            background: rgba(15, 23, 42, 0.6);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 8px;
+            color: #fff;
+            padding: 8px 12px;
+            width: 90px;
+            text-align: center;
+            font-size: 16px;
+            transition: border-color 0.2s;
+        }
+
+        .input-group input:focus {
+            border-color: var(--primary);
+            outline: none;
+        }
+
+        .btn-send {
+            background: var(--primary);
+            color: #0f172a;
+            border: none;
+            border-radius: 10px;
+            padding: 12px;
+            width: 100%;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background 0.2s, transform 0.1s;
+            margin-top: 10px;
+        }
+
+        .btn-send:hover { background: #00bfa5; }
+        .btn-send:active { transform: scale(0.98); }
+
         .updating { animation: pulse 0.4s ease; }
         @keyframes pulse {
             0% { opacity: 1; } 50% { opacity: 0.4; } 100% { opacity: 1; }
         }
 
-        /* 警報樣式 */
         .alarm { background: rgba(255, 71, 87, 0.2) !important; border-color: var(--warn) !important; }
         .alarm .value { color: var(--warn); }
     </style>
@@ -85,6 +232,8 @@
 <body>
 
     <h1>ESP32 數據監控中心</h1>
+
+    <div id="status">正在初始化連線...</div>
 
     <div class="dashboard">
         <div class="box" id="card-temp">
@@ -109,14 +258,70 @@
         </div>
     </div>
 
-    <div id="status">正在初始化連線...</div>
+    <div class="settings-panel">
+        <h2>⚙️ 設備即時運轉狀態</h2>
+        <div class="motor-grid">
+            <div class="motor-card">清水泵浦 <span id="motor-water" class="motor-state">離線</span></div>
+            <div class="motor-card">營養液A泵 <span id="motor-nutA" class="motor-state">離線</span></div>
+            <div class="motor-card">營養液B泵 <span id="motor-nutB" class="motor-state">離線</span></div>
+            <div class="motor-card">攪拌馬達 <span id="motor-mix" class="motor-state">離線</span></div>
+            <div class="motor-card">主抽水泵 <span id="motor-out" class="motor-state">離線</span></div>
+        </div>
+    </div>
+
+    <div class="settings-panel">
+        <h2>📊 雲端數據歷史趨勢圖 (每20秒自動同步)</h2>
+        <div class="chart-grid">
+            <div class="chart-container">
+    <iframe src="https://thingspeak.com/channels/3412365/charts/1?bgcolor=%231e293b&color=%2300d1b2&dynamic=true&results=30&type=line&update=20&api_key=URP8STHIXLVRQ6I6"></iframe>
+</div>
+<div class="chart-container">
+    <iframe src="https://thingspeak.com/channels/3412365/charts/2?bgcolor=%231e293b&color=%2338bdf8&dynamic=true&results=30&type=line&update=20&api_key=URP8STHIXLVRQ6I6"></iframe>
+</div>
+<div class="chart-container">
+    <iframe src="https://thingspeak.com/channels/3412365/charts/3?bgcolor=%231e293b&color=%23a855f7&dynamic=true&results=30&type=line&update=20&api_key=URP8STHIXLVRQ6I6"></iframe>
+</div>
+<div class="chart-container">
+    <iframe src="https://thingspeak.com/channels/3412365/charts/4?bgcolor=%231e293b&color=%23eab308&dynamic=true&results=30&type=line&update=20&api_key=URP8STHIXLVRQ6I6"></iframe>
+</div>
+<div class="chart-container">
+    <iframe src="https://thingspeak.com/channels/3412365/charts/5?bgcolor=%231e293b&color=%2322c55e&dynamic=true&results=30&type=line&update=20&api_key=URP8STHIXLVRQ6I6"></iframe>
+</div>
+        </div>
+    </div>
+
+    <div class="settings-panel">
+        <h2>🧪 半自動混和比例設定 (1秒約50CC)</h2>
+        <div class="config-flex-container">
+            <div class="input-group">
+                <label>清水 注入時間：</label>
+                <div>
+                    <input type="number" id="time-water" value="20" min="1" max="99">
+                    <span style="color:#64748b; margin-left:5px;">秒</span>
+                </div>
+            </div>
+            <div class="input-group">
+                <label>營養液 A 注入時間：</label>
+                <div>
+                    <input type="number" id="time-nutA" value="5" min="1" max="99">
+                    <span style="color:#64748b; margin-left:5px;">秒</span>
+                </div>
+            </div>
+            <div class="input-group">
+                <label>營養液 B 注入時間：</label>
+                <div>
+                    <input type="number" id="time-nutB" value="5" min="1" max="99">
+                    <span style="color:#64748b; margin-left:5px;">秒</span>
+                </div>
+            </div>
+            <button class="btn-send" onclick="sendMixingConfig()">發送新比例至系統</button>
+        </div>
+    </div>
 
     <script>
-        const brokerUrl = "wss://broker.emqx.io:8084/mqtt";
+        const brokerUrl = "wss://test.mosquitto.org:8081/mqtt";
         const client = mqtt.connect(brokerUrl);
 
-
-        // 通用更新函式
         function updateDisplay(id, val, alarmTrigger = null) {
             const el = document.getElementById(id);
             const card = document.getElementById('card-' + id);
@@ -126,24 +331,94 @@
             el.classList.add('updating');
             setTimeout(() => el.classList.remove('updating'), 400);
 
-            // 警報邏輯 (可視需求調整)
             if(alarmTrigger) {
                 card.classList.toggle('alarm', alarmTrigger(parseFloat(val)));
             }
         }
 
+        function updateMotorStatus(id, stateStr) {
+            const el = document.getElementById(id);
+            if (!el) return;
+
+            if (stateStr === "1" || stateStr.toUpperCase() === "ON" || stateStr.toUpperCase() === "RUN") {
+                el.innerText = "運轉中";
+                el.classList.add("motor-running");
+            } else {
+                el.innerText = "待機";
+                el.classList.remove("motor-running");
+            }
+        }
+
+        function clearDashboardData() {
+            const dataIds = ["temp", "humi", "lux", "w_temp", "w_level"];
+            dataIds.forEach(id => {
+                const el = document.getElementById(id);
+                if(el) el.innerText = "--";
+                const card = document.getElementById('card-' + id);
+                if(card) card.classList.remove('alarm');
+            });
+
+            const motorIds = ["motor-water", "motor-nutA", "motor-nutB", "motor-mix", "motor-out"];
+            motorIds.forEach(id => {
+                const el = document.getElementById(id);
+                if(el) {
+                    el.innerText = "離線";
+                    el.classList.remove("motor-running");
+                }
+            });
+        }
+
         client.on("connect", function () {
-            // document.getElementById("status").innerHTML = "● <span style='color:#00d1b2'>已連線到 Broker</span>";
-            document.getElementById("status").innerText = "✅ 已連線 (使用 MQTT.js)";
-            document.getElementById("status").style.color = "#00d1b2";
+            const statusEl = document.getElementById("status");
+            statusEl.innerText = "✅ 已連線面板";
+            statusEl.style.color = "#00d1b2";
             
-            // 這裡的主題名稱必須與 ESP32 程式碼定義的一模一樣
             client.subscribe("MYproject3109915/temperature");
             client.subscribe("MYproject3109915/humidity");
-            client.subscribe("MYproject3109915/light");      // 對應 light_topic
-            client.subscribe("MYproject3109915/watertemp");   // 對應 watertemp_topic
-            client.subscribe("MYproject3109915/waterleval");  // 對應 waterleval_topic
+            client.subscribe("MYproject3109915/light");      
+            client.subscribe("MYproject3109915/watertemp");   
+            client.subscribe("MYproject3109915/waterleval");  
+
+            client.subscribe("MYproject3109915/status/water");
+            client.subscribe("MYproject3109915/status/nutA");
+            client.subscribe("MYproject3109915/status/nutB");
+            client.subscribe("MYproject3109915/status/mix");
+            client.subscribe("MYproject3109915/status/out");
         });
+
+        client.on("offline", function () {
+            const statusEl = document.getElementById("status");
+            statusEl.innerText = "❌ 網路已離線";
+            statusEl.style.color = "#ff4757";
+            clearDashboardData();
+        });
+
+        client.on("close", function () {
+            const statusEl = document.getElementById("status");
+            statusEl.innerText = "❌ 伺服器斷開";
+            statusEl.style.color = "#ff4757";
+            clearDashboardData();
+        });
+
+        function sendMixingConfig() {
+            const waterSec = document.getElementById("time-water").value;
+            const nutASec = document.getElementById("time-nutA").value;
+            const nutBSec = document.getElementById("time-nutB").value;
+
+            const waterMs = parseInt(waterSec) * 1000;
+            const nutAMs = parseInt(nutASec) * 1000;
+            const nutBMs = parseInt(nutBSec) * 1000;
+
+            const topicWater = "MYproject3109915/config/water";
+            const topicNutA  = "MYproject3109915/config/nutA";
+            const topicNutB  = "MYproject3109915/config/nutB";
+
+            client.publish(topicWater, waterMs.toString(), { qos: 1, retain: true });
+            client.publish(topicNutA, nutAMs.toString(), { qos: 1, retain: true });
+            client.publish(topicNutB, nutBMs.toString(), { qos: 1, retain: true });
+
+            alert(`設定成功！\n清水: ${waterSec}秒\n營養液A: ${nutASec}秒\n營養液B: ${nutBSec}秒\n已同步至系統。`);
+        }
 
         client.on("message", function (topic, message) {
             const payload = message.toString();
@@ -155,11 +430,19 @@
             else if (topic.includes("watertemp")) updateDisplay("w_temp", payload, v => v > 30);
             else if (topic.includes("waterleval")) updateDisplay("w_level", payload, v => v < 20);
             
-            document.getElementById("status").innerText = "● 最後更新: " + new Date().toLocaleTimeString();
+            else if (topic.includes("status/water")) updateMotorStatus("motor-water", payload);
+            else if (topic.includes("status/nutA"))  updateMotorStatus("motor-nutA", payload);
+            else if (topic.includes("status/nutB"))  updateMotorStatus("motor-nutB", payload);
+            else if (topic.includes("status/mix"))   updateMotorStatus("motor-mix", payload);
+            else if (topic.includes("status/out"))   updateMotorStatus("motor-out", payload);
+
+            const statusEl = document.getElementById("status");
+            statusEl.innerText = "● 數據更新於 " + new Date().toLocaleTimeString();
+            statusEl.style.color = "#00d1b2";
         });
 
         client.on("error", (err) => {
-            document.getElementById("status").innerHTML = "❌ <span style='color:red'>連線失敗</span>";
+            document.getElementById("status").innerHTML = "❌ 連線失敗";
         });
     </script>
 </body>
